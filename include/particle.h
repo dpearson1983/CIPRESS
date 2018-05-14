@@ -7,6 +7,7 @@ class particle{
     double3 pos, vel;
     double mass;
     size_t ID;
+    bool firstStep = true;
     
     public:
         void update(double3 acceleration, double dt);

@@ -28,6 +28,7 @@
 #include "../include/particle.h"
 
 #define PI 3.14159265358979
+#define G 
 
 std::vector<double> fftFreq(int N, double L) {
     std::vector<double> k;
@@ -42,7 +43,7 @@ std::vector<double> fftFreq(int N, double L) {
 
 void getCICInfo(double3 pos, int3 N, double3 L, std::vector<int> &indices, 
                    std::vector<double> &weights) {
-    int3 ngp = {int(pos.x/L.x), int(pos.y/L.y), int(pos.z/L.z)};
+    int3 ngp = {int(pos.x*N.x/L.x), int(pos.y*N.y/L.y), int(pos.z*N.z/L.z)};
     double3 del_r = {L.x/N.x, L.y/N.y, L.z/N.z};
     double3 r_ngp = {(ngp.x + 0.5)*del_r.x, (ngp.y + 0.5)*del_r.y, (ngp.z + 0.5)*fel_r.z};
     double3 dr = {pos.x - r_ngp.x, pos.y - r_ngp.y, pos.z - r_ngp.z};
@@ -90,8 +91,6 @@ std::vector<double3> particleMeshAcceleration(std::vector<pariticle> &particles,
     fftw_init_threads();
     fftw_import_wisdom_from_filename("fftwWisdom.dat");
     fftw_plan_with_nthreads(omp_get_max_threads());
-    fftw_plan ax_forward = fftw_plan_dft_r2c_3d(N.x, N.y, N.z, ax.data(), ax.data(), FFTW_MEASURE);
-    fftw_plan ay_forward = fftw_plan_dft_r2c_3d(N.x, N.y, N.z, ay.data(), ay.data(), FFTW_MEASURE);
     fftw_plan az_forward = fftw_plan_dft_r2c_3d(N.x, N.y, N.z, az.data(), az.data(), FFTW_MEASURE);
     fftw_plan ax_backward = fftw_plan_dft_c2r_3d(N.x, N.y, N.z, ax.data(), ax.data(), FFTW_MEASURE);
     fftw_plan ay_backward = fftw_plan_dft_c2r_3d(N.x, N.y, N.z, ay.data(), ay.data(), FFTW_MEASURE);
@@ -109,5 +108,34 @@ std::vector<double3> particleMeshAcceleration(std::vector<pariticle> &particles,
             az[indices[i]] += weights[i]*(*it.get_mass()/dV);
     }
     
-    // TODO: Fourier transform stuff
+    // Perform initial Fourier transform of density field
+    fftw_execute(az_forward);
+    
+    // Get the individual components of the acceleration ready to transform again
+    for (int i = 0; i < N.x; ++i) {
+        for (int j = 0; j < N.y; ++j) {
+            for (int k = 0; k <= N.z/2; ++k) {
+                double k_mag = sqrt(kx[i]*kx[i] + ky[j]*ky[j] + kz[k]*kz[k]);
+                
+                double rho_real = az[(2*k    ) + 2*(N.z/2 + 1)*(j + N.y*i)];
+                double rho_imag = az[(2*k + 1) + 2*(N.z/2 + 1)*(j + N.y*i)];
+                
+                int index_real = (2*k    ) + 2*(N.z/2 + 1)*(j + N.y*i);
+                int index_imag = (2*k + 1) + 2*(N.z/2 + 1)*(j + N.y*i);
+                
+                ax[index_real] = -4.0*PI*G*rho_real*kx[i]/(k_mag*k_mag);
+                ax[index_imag] = -4.0*PI*G*rho_imag*kx[i]/(k_mag*k_mag);
+                
+                ay[index_real] = -4.0*PI*G*rho_real*ky[i]/(k_mag*k_mag);
+                ay[index_imag] = -4.0*PI*G*rho_imag*ky[i]/(k_mag*k_mag);
+                
+                az[index_real] = -4.0*PI*G*rho_real*kz[i]/(k_mag*k_mag);
+                az[index_imag] = -4.0*PI*G*rho_imag*kz[i]/(k_mag*k_mag);
+            }
+        }
+    }
+    
+    fftw_execute(ax_backward);
+    fftw_execute(ay_backward);
+    fftw_exectue(az_backward);
 }
