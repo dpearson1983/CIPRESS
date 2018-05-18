@@ -23,6 +23,7 @@
 #include <cmath>
 #include <fftw3.h>
 #include <omp.h>
+#include "../include/cic.h"
 #include "../include/pma.h"
 #include "../include/pods.h"
 #include "../include/particle.h"
@@ -39,39 +40,6 @@ std::vector<double> fftFreq(int N, double L) {
     for (size_t i = N/2 + 1; i < N; ++i)
         k.push_back((i - N)*dk);
     return k;
-}
-
-void getCICInfo(double3 pos, int3 N, double3 L, std::vector<int> &indices, 
-                   std::vector<double> &weights) {
-    int3 ngp = {int(pos.x*N.x/L.x), int(pos.y*N.y/L.y), int(pos.z*N.z/L.z)};
-    double3 del_r = {L.x/N.x, L.y/N.y, L.z/N.z};
-    double3 r_ngp = {(ngp.x + 0.5)*del_r.x, (ngp.y + 0.5)*del_r.y, (ngp.z + 0.5)*fel_r.z};
-    double3 dr = {pos.x - r_ngp.x, pos.y - r_ngp.y, pos.z - r_ngp.z};
-    int3 shift = {dr.x/fabs(dr.x), dr.y/fabs(dr.y), dr.z/fabs(dr.z)};
-    
-    dr.x = fabs(dr.x);
-    dr.y = fabs(dr.y);
-    dr.z = fabs(dr.z);
-    
-    double dV = del_r.x*del_r.y*del_r.z;
-    
-    indices.push_back(ngp.z + N.z*(ngp.y + N.y*ngp.x));
-    indices.push_back(ngp.z + N.z*(ngp.y + N.y*(ngp.x + shift.x)));                         // Shift: x
-    indices.push_back(ngp.z + N.z*((ngp.y + shift.y) + N.y*ngp.x));                         // Shift: y
-    indices.push_back((ngp.z + shfit.z) + N.z*(ngp.y + N.y*ngp.x));                         // Shift: z
-    indices.push_back(ngp.z + N.z*((ngp.y + shift.y) + N.y*(ngp.x + shift.x)));             // Shift: x, y
-    indices.push_back((ngp.z + shift.z) + N.z*(ngp.y + N.y*(ngp.x + shift.x)));             // Shift: x, z
-    indices.push_back((ngp.z + shift.z) + N.z*((ngp.y + shift.y) + N.y*ngp.x));             // Shift: y, z
-    indices.push_back((ngp.z + shift.z) + N.z*((ngp.y + shift.y) + N.y*(ngp.x + shift.x))); // Shift: x, y, z
-    
-    weights.push_back(((del_r.x - dr.x)*(del_r.y - dr.y)*(del_r.z - dr.z))/dV);
-    weights.push_back((dr.x*(del_r.y - dr.y)*(del_r.z - dr.z))/dV);
-    weights.push_back(((del_r.x - dr.x)*dr.y*(del_r.z - dr.z))/dV);
-    weights.push_back(((del_r.x - dr.x)*(del_r.y - dr.y)*dr.z)/dV);
-    weights.push_back((dr.x*dr.y*(del_r.z - dr.z))/dV);
-    weights.push_back((dr.x*(del_r.y - dr.y)*dr.z)/dV);
-    weights.push_back(((del_r.x - dr.x)*dr.y*dr.z)/dV);
-    weights.push_back((dr.x*dr.y*dr.z)/dV);
 }
 
 std::vector<double3> particleMeshAcceleration(std::vector<pariticle> &particles, int3 N, double3 L) {
