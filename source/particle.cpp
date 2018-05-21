@@ -1,6 +1,7 @@
 #include "../particle.h"
+#include "../cic.h"
 
-double3 particle::get_acceleration(const std::vector<double> &phi, double3 r) {
+double3 particle::get_acceleration(const std::vector<double> &phi, const int3 &N, const double3 &L) {
     
 
 // Implementation of a kick-drift-kick leap-frog integrator.

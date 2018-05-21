@@ -13,4 +13,16 @@ struct double3{
     double x, y, z;
 };
 
+struct int4{
+    int x, y, z, w;
+};
+
+struct float4{
+    float x, y, z, w;
+};
+
+struct double4{
+    double x, y, z, w;
+};
+
 #endif

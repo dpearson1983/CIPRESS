@@ -17,10 +17,10 @@ class particle{
     size_t ID; // 8 bytes
     bool firstStep = true; // 4 bytes
     
-    double3 get_acceleration(const std::vector<double> &phi, double3 r);
+    double3 get_acceleration(const std::vector<double> &phi, const int3 &N, const double3 &L);
     
     public:
-        void update(const std::vector<double> &phi, double dt);
+        void update(const std::vector<double> &phi, const double dt, const int3 &N, const double3 &L);
         
         double3 get_position();
         
