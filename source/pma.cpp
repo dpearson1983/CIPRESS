@@ -21,6 +21,7 @@
 #include <vector>
 #include <string>
 #include <cmath>
+#include <limits>
 #include <fftw3.h>
 #include <omp.h>
 #include "../include/cic.h"
@@ -31,7 +32,7 @@
 #define PI 3.14159265358979
 #define G 
 
-std::vector<double> fftFreq(int N, double L) {
+std::vector<double> fftFreq(const int N, const double L) {
     std::vector<double> k;
     k.reserve(N);
     double dk = (2.0*PI)/L;
@@ -42,30 +43,21 @@ std::vector<double> fftFreq(int N, double L) {
     return k;
 }
 
-std::vector<double3> particleMeshAcceleration(std::vector<pariticle> &particles, int3 N, double3 L) {
-    // Get the frequency vector components
-    std::vector<double> kx = fftFreq(N.x, L.x);
-    std::vector<double> ky = fftFreq(N.y, L.y);
-    std::vector<double> kz = fftFreq(N.z, L.z);
-    
-    // Set up arrays for the in-place FFTs
-    std::vector<double> ax(N.x*N.y*2*(N.z/2 + 1));
-    std::vector<double> ay(N.x*N.y*2*(N.z/2 + 1));
-    std::vector<double> az(N.x*N.y*2*(N.z/2 + 1));
-    
+void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex> &phi, 
+                              const std::vector<particle> &particles, const std::vector<double> &kx, 
+                              const std::vector<double> &ky, const std::vector<double> &kz, const int3 &N,
+                              const double3 &L, std::string wisdomFile) {
     double dV = (L.x/N.x)*(L.y/N.y)*(L.z/N.z);
     
     // Set up the FFT plans
     fftw_init_threads();
-    fftw_import_wisdom_from_filename("fftwWisdom.dat");
+    fftw_import_wisdom_from_filename(wisdomFile.c_str());
     fftw_plan_with_nthreads(omp_get_max_threads());
-    fftw_plan az_forward = fftw_plan_dft_r2c_3d(N.x, N.y, N.z, az.data(), az.data(), FFTW_MEASURE);
-    fftw_plan ax_backward = fftw_plan_dft_c2r_3d(N.x, N.y, N.z, ax.data(), ax.data(), FFTW_MEASURE);
-    fftw_plan ay_backward = fftw_plan_dft_c2r_3d(N.x, N.y, N.z, ay.data(), ay.data(), FFTW_MEASURE);
-    fftw_plan az_backward = fftw_plan_dft_c2r_3d(N.x, N.y, N.z, az.data(), az.data(), FFTW_MEASURE);
-    fftw_export_wisdom_to_filename("fftwWisdom.dat");
+    fftw_plan forward = fftw_plan_dft_r2c_3d(N.x, N.y, N.z, rho.data(), phi.data(), FFTW_MEASURE);
+    fftw_plan backward = fftw_plan_dft_c2r_3d(N.x, N.y, N.z, phi.data(), rho.data(), FFTW_MEASURE);
+    fftw_export_wisdom_to_filename(wisdomFile.c_str());
     
-    // To keep memory requirements at least somewhat lower, use the az array to calculate the density
+    // Bin the particles using cloud-in-cell to get density field
     for (std::vector<particle>::iterator it = particles.begin(); it != particles.end; ++it) {
         double3 pos = *it.get_position();
         std::vector<int> indices;
@@ -73,11 +65,11 @@ std::vector<double3> particleMeshAcceleration(std::vector<pariticle> &particles,
         getCICInfo(pos, N, L, indices, weights);
         
         for (int i = 0; i < 8; ++i)
-            az[indices[i]] += weights[i]*(*it.get_mass()/dV);
+            rho[indices[i]] += weights[i]*(*it.get_mass()/dV);
     }
     
     // Perform initial Fourier transform of density field
-    fftw_execute(az_forward);
+    fftw_execute(forward);
     
     // Get the individual components of the acceleration ready to transform again
     for (int i = 0; i < N.x; ++i) {
@@ -85,25 +77,123 @@ std::vector<double3> particleMeshAcceleration(std::vector<pariticle> &particles,
             for (int k = 0; k <= N.z/2; ++k) {
                 double k_mag = sqrt(kx[i]*kx[i] + ky[j]*ky[j] + kz[k]*kz[k]);
                 
-                double rho_real = az[(2*k    ) + 2*(N.z/2 + 1)*(j + N.y*i)];
-                double rho_imag = az[(2*k + 1) + 2*(N.z/2 + 1)*(j + N.y*i)];
-                
-                int index_real = (2*k    ) + 2*(N.z/2 + 1)*(j + N.y*i);
-                int index_imag = (2*k + 1) + 2*(N.z/2 + 1)*(j + N.y*i);
-                
-                ax[index_real] = -4.0*PI*G*rho_real*kx[i]/(k_mag*k_mag);
-                ax[index_imag] = -4.0*PI*G*rho_imag*kx[i]/(k_mag*k_mag);
-                
-                ay[index_real] = -4.0*PI*G*rho_real*ky[i]/(k_mag*k_mag);
-                ay[index_imag] = -4.0*PI*G*rho_imag*ky[i]/(k_mag*k_mag);
-                
-                az[index_real] = -4.0*PI*G*rho_real*kz[i]/(k_mag*k_mag);
-                az[index_imag] = -4.0*PI*G*rho_imag*kz[i]/(k_mag*k_mag);
+                if (k_mag > 0) {                
+                    phi[index][0] = -4.0*PI*G/(k_mag*k_mag);
+                    phi[index][1] = -4.0*PI*G/(k_mag*k_mag);
+                } else {
+                    phi[index][0] = 0.0;
+                    phi[index][1] = 0.0;
+                }
             }
         }
     }
     
-    fftw_execute(ax_backward);
-    fftw_execute(ay_backward);
-    fftw_exectue(az_backward);
+    // Perform backward transform to get the potential field
+    fftw_execute(backward);
+    
+    // Normalize
+    for (size_t i = 0; i < N_tot; ==i)
+        rho[i] /= N_tot;
+}
+
+void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex> &phi, 
+                              const particle *particles, const int N_p, const std::vector<double> &kx, 
+                              const std::vector<double> &ky, const std::vector<double> &kz, const int3 &N,
+                              const double3 &L, std::string wisdomFile) {
+    double dV = (L.x/N.x)*(L.y/N.y)*(L.z/N.z);
+    
+    // Set up the FFT plans
+    fftw_init_threads();
+    fftw_import_wisdom_from_filename(wisdomFile.c_str());
+    fftw_plan_with_nthreads(omp_get_max_threads());
+    fftw_plan forward = fftw_plan_dft_r2c_3d(N.x, N.y, N.z, rho.data(), phi.data(), FFTW_MEASURE);
+    fftw_plan backward = fftw_plan_dft_c2r_3d(N.x, N.y, N.z, phi.data(), rho.data(), FFTW_MEASURE);
+    fftw_export_wisdom_to_filename(wisdomFile.c_str());
+    
+    // Bin the particles using cloud-in-cell to get density field
+    for (size_t i = 0; i < N_p; ++i) {
+        double3 pos = particles[i].get_position();
+        std::vector<size_t> indices;
+        std::vector<double> weights;
+        getCICInfo(pos, N, L, indices, weights);
+        
+        for (int i = 0; i < 8; ++i)
+            rho[indices[i]] += (weights[i]*particles[i].get_mass())/dV;
+    }
+    
+    // Perform initial Fourier transform of density field
+    fftw_execute(forward);
+    
+    // Get the individual components of the acceleration ready to transform again
+    for (int i = 0; i < N.x; ++i) {
+        for (int j = 0; j < N.y; ++j) {
+            for (int k = 0; k <= N.z/2; ++k) {
+                double k_mag = sqrt(kx[i]*kx[i] + ky[j]*ky[j] + kz[k]*kz[k]);
+                
+                if (k_mag > 0) {                
+                    phi[index][0] = -4.0*PI*G/(k_mag*k_mag);
+                    phi[index][1] = -4.0*PI*G/(k_mag*k_mag);
+                } else {
+                    phi[index][0] = 0.0;
+                    phi[index][1] = 0.0;
+                }
+            }
+        }
+    }
+    
+    // Perform backward transform to get the potential field
+    fftw_execute(backward);
+    
+    // Normalize
+    for (size_t i = 0; i < N_tot; ++i)
+        rho[i] /= N_tot;
+}
+
+// This function imposes periodic boundary conditions for an arbitrary shift
+size_t periodic(size_t i, int shift, int N) {
+    size_t ip = i + shift % N;
+    if (ip > 2*N) {
+        ip = N - (std::numeric_limits<size_t>::max() - ip) - 1;
+    } else if (ip >= N) {
+        ip = ip % N;
+    }
+    return ip;
+}
+
+double3 gradient(size_t4 index, const int3 N, const double3 dr) {
+    double3 a = {0.0, 0.0, 0.0};
+    
+    a.x = (phi[index.z + N.z*(index.y + N.y*periodic(index.x, -2, N.x))] -
+           8.0*phi[index.z + N.z*(index.y + N.y*periodic(index.x, -1, N.x))] +
+           8.0*phi[index.z + N.z*(index.y + N.y*periodic(index.x, 1, N.x))] -
+           phi[index.z + N.z*(index.y + N.y*periodic(index.x, 2, N.x))])/(12.0*dr.x);
+    a.y = (phi[index.z + N.z*(periodic(index.y, -2, N.y) + N.y*index.x)] -
+           8.0*phi[index.z + N.z*(periodic(index.y, -1, N.y) + N.y*index.x)] +
+           8.0*phi[index.z + N.z*(periodic(index.y, 1, N.y) + N.y*index.x)] -
+           phi[index.z + N.z*(periodic(index.y, 2, N.y) + N.y*index.x)])/(12.0*dr.y);
+    a.z = (phi[periodic(index.z, -2, N.z) + N.z*(index.y + N.y*index.x)] -
+           8.0*phi[periodic(index.z, -1, N.z) + N.z*(index.y + N.y*index.x)] +
+           8.0*phi[periodic(index.z, 1, N.z) + N.z*(index.y + N.y*index.x)] -
+           phi[periodic(index.z, 2, N.z) + N.z*(index.y + N.y*index.x)])/(12.0*dr.x);
+           
+    return a;
+}
+
+// Calculates the acceleration of the particle at position by taking the gradient of the gravitational
+// potential using the 5 point finite difference method.
+double3 getParticleAcceleration(double3 position, const std::vector<double> &phi, const int3 &N, 
+                                const double3 &L) {
+    std::vector<size_t4> indices;
+    std::vector<double> weights;
+    getCICInfo(position, N, L, indices, weights);
+    double3 a = {0.0, 0.0, 0.0};
+    
+    double3 dr = {L.x/N.x, L.y/N.y, L.z/N.z};
+    for (int i = 0; i < 8; ++i) {
+        double3 a_grid = gradient(indices[i], N, dr);
+        a.x += weights[i]*a_grid.x;
+        a.y += weights[i]*a_grid.y;
+        a.z += weights[i]*a_grid.z;
+    }
+    return a;
 }

@@ -13,6 +13,10 @@ struct double3{
     double x, y, z;
 };
 
+struct size_t4{
+    size_t x, y, z, w;
+};
+
 struct int4{
     int x, y, z, w;
 };

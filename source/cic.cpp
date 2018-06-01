@@ -4,7 +4,7 @@
 
 // TODO: 
 //  -- Add check for when particle is at center of grid cell?
-void getCICInfo(const double3 &pos, const int3 &N, const double3 &L, std::vector<int> &indices, 
+void getCICInfo(const double3 &pos, const int3 &N, const double3 &L, std::vector<size_t> &indices, 
                    std::vector<double> &weights) {
     double3 del_r = {L.x/N.x, L.y/N.y, L.z/N.z};
     int3 ngp = {int(pos.x/del_r.x), int(pos.y/del_r.y), int(pos.z/del_r.z)};
@@ -45,7 +45,7 @@ void getCICInfo(const double3 &pos, const int3 &N, const double3 &L, std::vector
     weights.push_back((dr.x*dr.y*dr.z)/dV);
 }
 
-void getCICInfo(const double3 &pos, const int3 &N, const double3 &L, std::vector<int4> &indices, 
+void getCICInfo(double3 pos, const int3 &N, const double3 &L, std::vector<size_t4> &indices, 
                    std::vector<double> &weights) {
     double3 del_r = {L.x/N.x, L.y/N.y, L.z/N.z};
     int3 ngp = {int(pos.x/del_r.x), int(pos.y/del_r.y), int(pos.z/del_r.z)};
