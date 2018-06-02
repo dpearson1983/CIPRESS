@@ -3,11 +3,7 @@
 
 #include <vector>
 #include <string>
-
-// Convenience structure for storing vector data
-struct float3{
-    float x, y, z;
-};
+#include "pods.h"
 
 // Data structure for GADGET2's custom header in the snapshot files. "unused" is empty space left
 // by GADGET2's authors for possible adding additional items later.

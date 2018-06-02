@@ -8,9 +8,9 @@ void getCICInfo(const double3 &pos, const int3 &N, const double3 &L, std::vector
                    std::vector<double> &weights) {
     double3 del_r = {L.x/N.x, L.y/N.y, L.z/N.z};
     int3 ngp = {int(pos.x/del_r.x), int(pos.y/del_r.y), int(pos.z/del_r.z)};
-    double3 r_ngp = {(ngp.x + 0.5)*del_r.x, (ngp.y + 0.5)*del_r.y, (ngp.z + 0.5)*fel_r.z};
+    double3 r_ngp = {(ngp.x + 0.5)*del_r.x, (ngp.y + 0.5)*del_r.y, (ngp.z + 0.5)*del_r.z};
     double3 dr = {pos.x - r_ngp.x, pos.y - r_ngp.y, pos.z - r_ngp.z};
-    int3 shift = {dr.x/fabs(dr.x), dr.y/fabs(dr.y), dr.z/fabs(dr.z)};
+    int3 shift = {int(dr.x/fabs(dr.x)), int(dr.y/fabs(dr.y)), int(dr.z/fabs(dr.z))};
     
     dr.x = fabs(dr.x);
     dr.y = fabs(dr.y);
@@ -26,14 +26,14 @@ void getCICInfo(const double3 &pos, const int3 &N, const double3 &L, std::vector
     if (ngp.y + shift.y == N.y) shift.y = 1 - N.y;
     if (ngp.z + shift.z == N.z) shift.z = 1 - N.z;
     
-    indices.push_back(ngp.z + N.z*(ngp.y + N.y*ngp.x));
-    indices.push_back(ngp.z + N.z*(ngp.y + N.y*(ngp.x + shift.x)));                         // Shift: x
-    indices.push_back(ngp.z + N.z*((ngp.y + shift.y) + N.y*ngp.x));                         // Shift: y
-    indices.push_back((ngp.z + shfit.z) + N.z*(ngp.y + N.y*ngp.x));                         // Shift: z
-    indices.push_back(ngp.z + N.z*((ngp.y + shift.y) + N.y*(ngp.x + shift.x)));             // Shift: x, y
-    indices.push_back((ngp.z + shift.z) + N.z*(ngp.y + N.y*(ngp.x + shift.x)));             // Shift: x, z
-    indices.push_back((ngp.z + shift.z) + N.z*((ngp.y + shift.y) + N.y*ngp.x));             // Shift: y, z
-    indices.push_back((ngp.z + shift.z) + N.z*((ngp.y + shift.y) + N.y*(ngp.x + shift.x))); // Shift: x, y, z
+    indices.push_back(size_t(ngp.z + N.z*(ngp.y + N.y*ngp.x)));
+    indices.push_back(size_t(ngp.z + N.z*(ngp.y + N.y*(ngp.x + shift.x))));                 // Shift: x
+    indices.push_back(size_t(ngp.z + N.z*((ngp.y + shift.y) + N.y*ngp.x)));                 // Shift: y
+    indices.push_back(size_t((ngp.z + shift.z) + N.z*(ngp.y + N.y*ngp.x)));                 // Shift: z
+    indices.push_back(size_t(ngp.z + N.z*((ngp.y + shift.y) + N.y*(ngp.x + shift.x))));     // Shift: x, y
+    indices.push_back(size_t((ngp.z + shift.z) + N.z*(ngp.y + N.y*(ngp.x + shift.x))));     // Shift: x, z
+    indices.push_back(size_t((ngp.z + shift.z) + N.z*((ngp.y + shift.y) + N.y*ngp.x)));     // Shift: y, z
+    indices.push_back(size_t((ngp.z + shift.z) + N.z*((ngp.y + shift.y) + N.y*(ngp.x + shift.x)))); // Shift: x, y, z
     
     weights.push_back(((del_r.x - dr.x)*(del_r.y - dr.y)*(del_r.z - dr.z))/dV);
     weights.push_back((dr.x*(del_r.y - dr.y)*(del_r.z - dr.z))/dV);
@@ -49,9 +49,9 @@ void getCICInfo(double3 pos, const int3 &N, const double3 &L, std::vector<size_t
                    std::vector<double> &weights) {
     double3 del_r = {L.x/N.x, L.y/N.y, L.z/N.z};
     int3 ngp = {int(pos.x/del_r.x), int(pos.y/del_r.y), int(pos.z/del_r.z)};
-    double3 r_ngp = {(ngp.x + 0.5)*del_r.x, (ngp.y + 0.5)*del_r.y, (ngp.z + 0.5)*fel_r.z};
+    double3 r_ngp = {(ngp.x + 0.5)*del_r.x, (ngp.y + 0.5)*del_r.y, (ngp.z + 0.5)*del_r.z};
     double3 dr = {pos.x - r_ngp.x, pos.y - r_ngp.y, pos.z - r_ngp.z};
-    int3 shift = {dr.x/fabs(dr.x), dr.y/fabs(dr.y), dr.z/fabs(dr.z)};
+    int3 shift = {int(dr.x/fabs(dr.x)), int(dr.y/fabs(dr.y)), int(dr.z/fabs(dr.z))};
     
     dr.x = fabs(dr.x);
     dr.y = fabs(dr.y);
@@ -67,14 +67,23 @@ void getCICInfo(double3 pos, const int3 &N, const double3 &L, std::vector<size_t
     if (ngp.y + shift.y == N.y) shift.y = 1 - N.y;
     if (ngp.z + shift.z == N.z) shift.z = 1 - N.z;
     
-    indices.push_back({ngp.x, ngp.y, ngp.z, ngp.z + N.z*(ngp.y + N.y*ngp.x)});
-    indices.push_back({ngp.x + shift.x, ngp.y, ngp.z, ngp.z + N.z*(ngp.y + N.y*(ngp.x + shift.x))});                         // Shift: x
-    indices.push_back({ngp.x, ngp.y + shift.y, ngp.z, ngp.z + N.z*((ngp.y + shift.y) + N.y*ngp.x)});                         // Shift: y
-    indices.push_back({ngp.x, ngp.y, ngp.z + shift.z, (ngp.z + shfit.z) + N.z*(ngp.y + N.y*ngp.x)});                         // Shift: z
-    indices.push_back({ngp.x + shift.x, ngp.y + shift.y, ngp.z, ngp.z + N.z*((ngp.y + shift.y) + N.y*(ngp.x + shift.x))});             // Shift: x, y
-    indices.push_back({ngp.x + shift.x, ngp.y, ngp.z + shift.z, (ngp.z + shift.z) + N.z*(ngp.y + N.y*(ngp.x + shift.x))});             // Shift: x, z
-    indices.push_back({ngp.x, ngp.y + shift.y, ngp.z + shfit.z, (ngp.z + shift.z) + N.z*((ngp.y + shift.y) + N.y*ngp.x)});             // Shift: y, z
-    indices.push_back({ngp.x + shift.x, ngp.y + shift.y, ngp.z + shift.z, (ngp.z + shift.z) + N.z*((ngp.y + shift.y) + N.y*(ngp.x + shift.x))}); // Shift: x, y, z
+    size_t4 index1 = {size_t(ngp.x), size_t(ngp.y), size_t(ngp.z), size_t(ngp.z + N.z*(ngp.y + N.y*ngp.x))};
+    size_t4 index2 = {size_t(ngp.x + shift.x), size_t(ngp.y), size_t(ngp.z), size_t(ngp.z + N.z*(ngp.y + N.y*(ngp.x + shift.x)))};
+    size_t4 index3 = {size_t(ngp.x), size_t(ngp.y + shift.y), size_t(ngp.z), size_t(ngp.z + N.z*((ngp.y + shift.y) + N.y*ngp.x))};
+    size_t4 index4 = {size_t(ngp.x), size_t(ngp.y), size_t(ngp.z + shift.z), size_t((ngp.z + shift.z) + N.z*(ngp.y + N.y*ngp.x))};
+    size_t4 index5 = {size_t(ngp.x + shift.x), size_t(ngp.y + shift.y), size_t(ngp.z), size_t(ngp.z + N.z*((ngp.y + shift.y) + N.y*(ngp.x + shift.x)))};
+    size_t4 index6 = {size_t(ngp.x + shift.x), size_t(ngp.y), size_t(ngp.z + shift.z), size_t((ngp.z + shift.z) + N.z*(ngp.y + N.y*(ngp.x + shift.x)))};
+    size_t4 index7 = {size_t(ngp.x), size_t(ngp.y + shift.y), size_t(ngp.z + shift.z), size_t((ngp.z + shift.z) + N.z*((ngp.y + shift.y) + N.y*ngp.x))};
+    size_t4 index8 = {size_t(ngp.x + shift.x), size_t(ngp.y + shift.y), size_t(ngp.z + shift.z), size_t((ngp.z + shift.z) + N.z*((ngp.y + shift.y) + N.y*(ngp.x + shift.x)))};
+    
+    indices.push_back(index1);
+    indices.push_back(index2);                         // Shift: x
+    indices.push_back(index3);                         // Shift: y
+    indices.push_back(index4);                         // Shift: z
+    indices.push_back(index5);             // Shift: x, y
+    indices.push_back(index6);             // Shift: x, z
+    indices.push_back(index7);             // Shift: y, z
+    indices.push_back(index8); // Shift: x, y, z
     
     weights.push_back(((del_r.x - dr.x)*(del_r.y - dr.y)*(del_r.z - dr.z))/dV);
     weights.push_back((dr.x*(del_r.y - dr.y)*(del_r.z - dr.z))/dV);

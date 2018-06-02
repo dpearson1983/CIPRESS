@@ -11,6 +11,16 @@ struct float3{
 
 struct double3{
     double x, y, z;
+    
+    double3 operator +(const double3 &a) {
+        double3 b = {x + a.x, y + a.y, z + a.z};
+        return b;
+    }
+    
+    double3 operator -(const double3 &a) {
+        double3 b = {x - a.x, y - a.y, z - a.z};
+        return b;
+    }
 };
 
 struct size_t4{

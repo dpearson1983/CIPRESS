@@ -1,6 +1,7 @@
 #ifndef _PARTICLE_H_
 #define _PARTICLE_H_
 
+#include <vector>
 #include "pods.h"
 
 // Class for storing relevant information for particles in N-body simulations. Each particle will need
@@ -17,6 +18,10 @@ class particle{
     size_t ID; // 8 bytes
     
     public:
+        particle(const int &id, const double3 &position, const double3 &velocity, const double &m);
+        
+        particle(const int &id, const float3 &posistion, const float3 &velocity, const double &m);
+        
         void firstStep(const std::vector<double> &phi, const double dt, const int3 &N, const double3 &L);
         
         void update(const std::vector<double> &phi, const double dt, const int3 &N, const double3 &L);

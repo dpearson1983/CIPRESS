@@ -29,8 +29,13 @@
 #include "../include/pods.h"
 #include "../include/particle.h"
 
+#ifndef PI
 #define PI 3.14159265358979
-#define G 
+#endif
+
+#ifndef G
+#define G 43215.3390466 // In Gadget2 style units.
+#endif
 
 std::vector<double> fftFreq(const int N, const double L) {
     std::vector<double> k;
@@ -48,6 +53,7 @@ void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex
                               const std::vector<double> &ky, const std::vector<double> &kz, const int3 &N,
                               const double3 &L, std::string wisdomFile) {
     double dV = (L.x/N.x)*(L.y/N.y)*(L.z/N.z);
+    size_t N_tot = N.x*N.y*N.z;
     
     // Set up the FFT plans
     fftw_init_threads();
@@ -58,14 +64,15 @@ void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex
     fftw_export_wisdom_to_filename(wisdomFile.c_str());
     
     // Bin the particles using cloud-in-cell to get density field
-    for (std::vector<particle>::iterator it = particles.begin(); it != particles.end; ++it) {
-        double3 pos = *it.get_position();
-        std::vector<int> indices;
+    for (auto it = particles.begin(); it != particles.end(); ++it) {
+        particle p = *it;
+        double3 pos = p.get_position();
+        std::vector<size_t> indices;
         std::vector<double> weights;
         getCICInfo(pos, N, L, indices, weights);
         
         for (int i = 0; i < 8; ++i)
-            rho[indices[i]] += weights[i]*(*it.get_mass()/dV);
+            rho[indices[i]] += weights[i]*(p.get_mass()/dV);
     }
     
     // Perform initial Fourier transform of density field
@@ -76,6 +83,7 @@ void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex
         for (int j = 0; j < N.y; ++j) {
             for (int k = 0; k <= N.z/2; ++k) {
                 double k_mag = sqrt(kx[i]*kx[i] + ky[j]*ky[j] + kz[k]*kz[k]);
+                int index = k + (N.z/2 + 1)*(j + N.y*i);
                 
                 if (k_mag > 0) {                
                     phi[index][0] = -4.0*PI*G/(k_mag*k_mag);
@@ -92,15 +100,20 @@ void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex
     fftw_execute(backward);
     
     // Normalize
-    for (size_t i = 0; i < N_tot; ==i)
+    for (size_t i = 0; i < N_tot; ++i)
         rho[i] /= N_tot;
+    
+    fftw_destroy_plan(forward);
+    fftw_destroy_plan(backward);
+    fftw_cleanup();
 }
 
 void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex> &phi, 
-                              const particle *particles, const int N_p, const std::vector<double> &kx, 
+                              particle *particles, const int N_p, const std::vector<double> &kx, 
                               const std::vector<double> &ky, const std::vector<double> &kz, const int3 &N,
                               const double3 &L, std::string wisdomFile) {
     double dV = (L.x/N.x)*(L.y/N.y)*(L.z/N.z);
+    size_t N_tot = N.x*N.y*N.z;
     
     // Set up the FFT plans
     fftw_init_threads();
@@ -129,6 +142,7 @@ void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex
         for (int j = 0; j < N.y; ++j) {
             for (int k = 0; k <= N.z/2; ++k) {
                 double k_mag = sqrt(kx[i]*kx[i] + ky[j]*ky[j] + kz[k]*kz[k]);
+                int index = k + (N.z/2 + 1)*(j + N.y*i);
                 
                 if (k_mag > 0) {                
                     phi[index][0] = -4.0*PI*G/(k_mag*k_mag);
@@ -147,6 +161,10 @@ void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex
     // Normalize
     for (size_t i = 0; i < N_tot; ++i)
         rho[i] /= N_tot;
+    
+    fftw_destroy_plan(forward);
+    fftw_destroy_plan(backward);
+    fftw_cleanup();
 }
 
 // This function imposes periodic boundary conditions for an arbitrary shift
@@ -160,7 +178,7 @@ size_t periodic(size_t i, int shift, int N) {
     return ip;
 }
 
-double3 gradient(size_t4 index, const int3 N, const double3 dr) {
+double3 gradient(size_t4 index, const std::vector<double> &phi, const int3 N, const double3 dr) {
     double3 a = {0.0, 0.0, 0.0};
     
     a.x = (phi[index.z + N.z*(index.y + N.y*periodic(index.x, -2, N.x))] -
@@ -190,10 +208,27 @@ double3 getParticleAcceleration(double3 position, const std::vector<double> &phi
     
     double3 dr = {L.x/N.x, L.y/N.y, L.z/N.z};
     for (int i = 0; i < 8; ++i) {
-        double3 a_grid = gradient(indices[i], N, dr);
+        double3 a_grid = gradient(indices[i], phi, N, dr);
         a.x += weights[i]*a_grid.x;
         a.y += weights[i]*a_grid.y;
         a.z += weights[i]*a_grid.z;
+    }
+    return a;
+}
+
+// NOTE: This function is for testing purposes only. It will be very slow but very precise. It is
+//       intended to be used to compare the results of the PM methods above with an "exact" result using
+//       the particle-particle method.
+double3 getParticleAcceleration(double3 position, const std::vector<particle> &particles) {
+    double3 a = {0.0, 0.0, 0.0};
+    for (auto it = particles.begin(); it != particles.end(); ++it) {
+        particle p = *it;
+        double3 r = p.get_position() - position;
+        double r_mag = sqrt(r.x*r.x + r.y*r.y + r.z*r.z);
+        
+        a.x += G*(p.get_mass())*r.x/(r_mag*r_mag*r_mag);
+        a.y += G*(p.get_mass())*r.y/(r_mag*r_mag*r_mag);
+        a.z += G*(p.get_mass())*r.z/(r_mag*r_mag*r_mag);
     }
     return a;
 }
