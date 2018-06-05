@@ -107,8 +107,8 @@ void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex
                 int index = k + (N.z/2 + 1)*(j + N.y*i);
                 
                 if (k_mag > 0) {                
-                    phi[index][0] = -4.0*PI*G*gridCor/k_mag;
-                    phi[index][1] = -4.0*PI*G*gridCor/k_mag;
+                    phi[index][0] = -4.0*PI*G/k_mag;
+                    phi[index][1] = -4.0*PI*G/k_mag;
                 } else {
                     phi[index][0] = 0.0;
                     phi[index][1] = 0.0;
