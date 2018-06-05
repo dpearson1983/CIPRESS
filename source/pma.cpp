@@ -48,14 +48,27 @@ std::vector<double> fftFreq(const int N, const double L) {
     return k;
 }
 
+double cicGridCor(double kx, double ky, double kz, double3 del_r) {
+    double sincx = sin(0.5*kx*del_r.x + 1E-17)/(0.5*kx*del_r.x + 1E-17);
+    double sincy = sin(0.5*ky*del_r.y + 1E-17)/(0.5*ky*del_r.y + 1E-17);
+    double sincz = sin(0.5*kz*del_r.z + 1E-17)/(0.5*kz*del_r.z + 1E-17);
+    
+    double prodSinc = 1.0/(sincx*sincy*sincz);
+    return (prodSinc*prodSinc);
+}
+
 void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex> &phi, 
                               const std::vector<particle> &particles, const std::vector<double> &kx, 
                               const std::vector<double> &ky, const std::vector<double> &kz, const int3 &N,
-                              const double3 &L, std::string wisdomFile) {
+                              const double3 &L, std::string wisdomFile, bool verb) {
     double dV = (L.x/N.x)*(L.y/N.y)*(L.z/N.z);
     size_t N_tot = N.x*N.y*N.z;
+    double3 del_r = {L.x/N.x, L.y/N.y, L.z/N.z};
+    
+    if (verb) std::cout << N.x << ", " << N.y << ", " << N.z << std::endl;
     
     // Set up the FFT plans
+    if (verb) std::cout << "Planning transforms..." << std::endl;
     fftw_init_threads();
     fftw_import_wisdom_from_filename(wisdomFile.c_str());
     fftw_plan_with_nthreads(omp_get_max_threads());
@@ -63,7 +76,12 @@ void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex
     fftw_plan backward = fftw_plan_dft_c2r_3d(N.x, N.y, N.z, phi.data(), rho.data(), FFTW_MEASURE);
     fftw_export_wisdom_to_filename(wisdomFile.c_str());
     
+    for (auto it = rho.begin(); it != rho.end(); ++it) {
+        *it = 0.0;
+    }
+    
     // Bin the particles using cloud-in-cell to get density field
+    if (verb) std::cout << "Binning particles..." << std::endl;
     for (auto it = particles.begin(); it != particles.end(); ++it) {
         particle p = *it;
         double3 pos = p.get_position();
@@ -76,18 +94,21 @@ void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex
     }
     
     // Perform initial Fourier transform of density field
+    if (verb) std::cout << "Transforming..." << std::endl;
     fftw_execute(forward);
     
     // Get the individual components of the acceleration ready to transform again
+    if (verb) std::cout << "Convolving Green's function..." << std::endl;
     for (int i = 0; i < N.x; ++i) {
         for (int j = 0; j < N.y; ++j) {
             for (int k = 0; k <= N.z/2; ++k) {
-                double k_mag = sqrt(kx[i]*kx[i] + ky[j]*ky[j] + kz[k]*kz[k]);
+                double gridCor = cicGridCor(kx[i], ky[j], kz[k], del_r);
+                double k_mag = kx[i]*kx[i] + ky[j]*ky[j] + kz[k]*kz[k];
                 int index = k + (N.z/2 + 1)*(j + N.y*i);
                 
                 if (k_mag > 0) {                
-                    phi[index][0] = -4.0*PI*G/(k_mag*k_mag);
-                    phi[index][1] = -4.0*PI*G/(k_mag*k_mag);
+                    phi[index][0] = -4.0*PI*G*gridCor/k_mag;
+                    phi[index][1] = -4.0*PI*G*gridCor/k_mag;
                 } else {
                     phi[index][0] = 0.0;
                     phi[index][1] = 0.0;
@@ -97,12 +118,15 @@ void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex
     }
     
     // Perform backward transform to get the potential field
+    if (verb) std::cout << "Transforming..." << std::endl;
     fftw_execute(backward);
     
     // Normalize
+    if (verb) std::cout << "Normalizing..." << std::endl;
     for (size_t i = 0; i < N_tot; ++i)
         rho[i] /= N_tot;
     
+    if (verb) std::cout << "Cleaning up..." << std::endl;
     fftw_destroy_plan(forward);
     fftw_destroy_plan(backward);
     fftw_cleanup();
@@ -111,7 +135,7 @@ void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex
 void particleMeshAcceleration(std::vector<double> &rho, std::vector<fftw_complex> &phi, 
                               particle *particles, const int N_p, const std::vector<double> &kx, 
                               const std::vector<double> &ky, const std::vector<double> &kz, const int3 &N,
-                              const double3 &L, std::string wisdomFile) {
+                              const double3 &L, std::string wisdomFile, bool verb) {
     double dV = (L.x/N.x)*(L.y/N.y)*(L.z/N.z);
     size_t N_tot = N.x*N.y*N.z;
     
@@ -196,6 +220,16 @@ double3 gradient(size_t4 index, const std::vector<double> &phi, const int3 N, co
            
     return a;
 }
+
+// double3 gradient(size_t4 index, const std::vector<double> &phi, const int3 N, const double3 dr) {
+//     double3 a = {0.0, 0.0, 0.0};
+//     
+//     a.x = (phi[index.z + N.z*(index.y + N.y*periodic(index.x, 1, N.x))] - phi[index.z + N.z*(index.y + N.y*periodic(index.x, -1, N.x))])/(2.0*dr.x);
+//     a.y = (phi[index.z + N.z*(periodic(index.y, 1, N.y) + N.y*index.x)] - phi[index.z + N.z*(periodic(index.y, -1, N.y) + N.y*index.x)])/(2.0*dr.y);
+//     a.z = (phi[periodic(index.z, 1, N.z) + N.z*(index.y + N.y*index.x)] - phi[periodic(index.z, -1, N.z) + N.z*(index.y + N.y*index.x)])/(2.0*dr.z);
+//     
+//     return a;
+// }
 
 // Calculates the acceleration of the particle at position by taking the gradient of the gravitational
 // potential using the 5 point finite difference method.

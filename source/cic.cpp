@@ -1,3 +1,4 @@
+#include <sstream>
 #include <vector>
 #include <cmath>
 #include "../include/pods.h"
@@ -6,17 +7,49 @@
 //  -- Add check for when particle is at center of grid cell?
 void getCICInfo(double3 pos, const int3 &N, const double3 &L, std::vector<size_t> &indices, 
                 std::vector<double> &weights) {
+    if (pos.x < 0 || pos.x > 256000 || pos.y < 0 || pos.y > 256000 || pos.z < 0 || pos.z > 256000) {
+        std::stringstream errMessage;
+        errMessage << "Particle oddly out of bounds: (" << pos.x << ", " << pos.y << ", " << pos.z << ")";
+        throw std::runtime_error(errMessage.str());
+    }
     double3 del_r = {L.x/N.x, L.y/N.y, L.z/N.z};
     int3 ngp = {int(pos.x/del_r.x), int(pos.y/del_r.y), int(pos.z/del_r.z)};
     double3 r_ngp = {(ngp.x + 0.5)*del_r.x, (ngp.y + 0.5)*del_r.y, (ngp.z + 0.5)*del_r.z};
     double3 dr = {pos.x - r_ngp.x, pos.y - r_ngp.y, pos.z - r_ngp.z};
-    int3 shift = {int(dr.x/fabs(dr.x)), int(dr.y/fabs(dr.y)), int(dr.z/fabs(dr.z))};
+    int3 shift;
+    if (dr.x != 0) shift.x = int(dr.x/fabs(dr.x));
+    else shift.x = 0;
+    if (dr.y != 0) shift.y = int(dr.y/fabs(dr.y));
+    else shift.y = 0; 
+    if (dr.z != 0) shift.z = int(dr.z/fabs(dr.z));
+    else shift.z = 0;
     
     dr.x = fabs(dr.x);
     dr.y = fabs(dr.y);
     dr.z = fabs(dr.z);
     
     double dV = del_r.x*del_r.y*del_r.z;
+    
+    if (ngp.x + shift.x < -1 || ngp.x + shift.x > N.x || shift.x < -1 || shift.x > 1) {
+        std::stringstream errMessage;
+        errMessage << "x index seems funny: " << ngp.x << ", " << shift.x << "\n";
+        errMessage << pos.x << ", " << r_ngp.x << ", " << dr.x;
+        throw std::runtime_error(errMessage.str());
+    }
+    
+    if (ngp.y + shift.y < -1 || ngp.y + shift.y > N.y || shift.y < -1 || shift.y > 1) {
+        std::stringstream errMessage;
+        errMessage << "y index seems funny: " << ngp.y << ", " << shift.y << "\n";
+        errMessage << pos.y << ", " << r_ngp.y << ", " << dr.y;
+        throw std::runtime_error(errMessage.str());
+    }
+    
+    if (ngp.z + shift.z < -1 || ngp.z + shift.z > N.z || shift.z < -1 || shift.z > 1) {
+        std::stringstream errMessage;
+        errMessage << "z index seems funny: " << ngp.z << ", " << shift.z << "\n";
+        errMessage << pos.z << ", " << r_ngp.z << ", " << dr.z;
+        throw std::runtime_error(errMessage.str());
+    }
     
     if (ngp.x + shift.x == -1) shift.x = N.x - 1;
     if (ngp.y + shift.y == -1) shift.y = N.y - 1;
